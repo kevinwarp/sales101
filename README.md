@@ -1,70 +1,74 @@
-# Sales101 — RAG over Google Drive Documents
+# Sales101 – RAG-Powered Sales Knowledge Base
 
-A conversational Retrieval-Augmented Generation (RAG) application that ingests documents from Google Drive and answers questions about them using Claude.
+A conversational retrieval-augmented generation (RAG) application that ingests
+documents from Google Drive and answers questions using Anthropic Claude.
 
 ## Stack
 
 - **LLM** – Anthropic Claude (via `langchain-anthropic`)
-- **Embeddings** – Voyage AI (via `langchain-voyageai`)
-- **Vector Store** – ChromaDB (persistent, local)
-- **Framework** – LangChain
+- **Embeddings** – Voyage AI (`voyage-3`)
+- **Vector Store** – ChromaDB (persistent, on-disk)
+- **Orchestration** – LangChain
 - **Document Sources** – Google Drive (PDFs, Word docs, Google Docs, Sheets, Slides)
+- **Chat UI** – Rich-powered CLI
+
+## Quick Start
+
+```bash
+# 1. Create a virtual environment
+python -m venv .venv && source .venv/bin/activate
+
+# 2. Install dependencies
+pip install -r requirements.txt
+
+# 3. Configure environment
+cp .env.example .env
+# Edit .env with your API keys and Google Drive folder IDs
+
+# 4. Set up Google Drive credentials
+# Place your OAuth 2.0 credentials.json in the project root.
+# See https://developers.google.com/drive/api/quickstart/python
+
+# 5. Ingest documents
+python main.py ingest
+
+# 6. Chat
+python main.py chat
+```
 
 ## Project Structure
 
 ```
 sales101/
-├── main.py                  # CLI entry point (ingest / chat)
-├── config/
-│   └── settings.py          # Centralised env-based configuration
-├── ingestion/
-│   ├── google_drive.py      # Google Drive API client
-│   ├── parsers.py           # File-type loaders (PDF, DOCX, XLSX, PPTX, CSV)
-│   └── pipeline.py          # Download → parse → chunk → store pipeline
-├── vectorstore/
-│   └── store.py             # ChromaDB + Voyage AI embeddings
-├── rag/
-│   ├── chain.py             # History-aware retrieval chain with Claude
-│   └── prompts.py           # Prompt templates
-├── chat/
-│   └── interface.py         # Interactive terminal chat
+├── main.py               # CLI entrypoint (ingest / chat)
+├── config.py             # Centralised env-var configuration
 ├── requirements.txt
 ├── .env.example
-└── .gitignore
+├── ingest/
+│   ├── google_drive.py   # Google Drive API client
+│   ├── loader.py         # File → LangChain Document loaders
+│   └── pipeline.py       # Download → parse → chunk → embed → store
+├── rag/
+│   ├── embeddings.py     # Voyage AI embeddings
+│   ├── vectorstore.py    # ChromaDB vector store
+│   └── chain.py          # Conversational retrieval chain (Claude)
+└── chat/
+    └── cli.py            # Interactive Rich CLI chat
 ```
-
-## Setup
-
-### 1. Install dependencies
-
-```bash
-python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-```
-
-### 2. Configure environment
-
-```bash
-cp .env.example .env
-# Edit .env with your API keys and Google Drive folder ID.
-```
-
-### 3. Google Drive credentials
-
-1. Create a project in the [Google Cloud Console](https://console.cloud.google.com/).
-2. Enable the **Google Drive API**.
-3. Create **OAuth 2.0 Client ID** credentials (Desktop app).
-4. Download the JSON and save it as `credentials.json` in the project root.
-
-On the first run the app will open a browser for OAuth consent and save `token.json` locally.
 
 ## Usage
 
-### Ingest documents
+### Ingest
 
 ```bash
-python main.py ingest                         # uses GOOGLE_DRIVE_FOLDER_ID from .env
-python main.py ingest --folder-id <FOLDER_ID> # override folder
+# Use folder IDs from .env
+python main.py ingest
+
+# Or specify folder IDs directly
+python main.py ingest FOLDER_ID_1 FOLDER_ID_2
+
+# Verbose logging
+python main.py -v ingest
 ```
 
 ### Chat
@@ -73,4 +77,5 @@ python main.py ingest --folder-id <FOLDER_ID> # override folder
 python main.py chat
 ```
 
-Type questions and receive answers grounded in your ingested documents. Chat history is maintained for follow-up questions.
+Type your questions at the prompt. The assistant will retrieve relevant chunks
+from the vector store and answer using Claude. Type `quit` or `exit` to end.

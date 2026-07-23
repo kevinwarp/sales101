@@ -1,42 +1,60 @@
-"""RAG chain: history-aware retrieval + Claude question-answering."""
+"""Conversational retrieval chain: Claude LLM + ChromaDB retriever."""
 
 from __future__ import annotations
 
-from langchain.chains.combine_documents import create_stuff_documents_chain
-from langchain.chains.history_aware_retriever import create_history_aware_retriever
-from langchain.chains.retrieval import create_retrieval_chain
+from functools import lru_cache
+
+from langchain.chains import ConversationalRetrievalChain
 from langchain_anthropic import ChatAnthropic
+from langchain_core.prompts import (
+    ChatPromptTemplate,
+    HumanMessagePromptTemplate,
+    SystemMessagePromptTemplate,
+)
 
-from config.settings import ANTHROPIC_API_KEY, ANTHROPIC_MODEL
-from rag.prompts import CONTEXTUALISE_PROMPT, QA_PROMPT
-from vectorstore.store import get_retriever
+import config
+from rag.vectorstore import get_vectorstore
+
+SYSTEM_PROMPT = """\
+You are a helpful sales assistant. Answer the user's question using ONLY the
+context retrieved from the company's document store. If the context does not
+contain enough information to answer, say so clearly — do not make things up.
+
+When citing information, mention the source document name if available.
+"""
+
+QA_PROMPT = ChatPromptTemplate.from_messages(
+    [
+        SystemMessagePromptTemplate.from_template(SYSTEM_PROMPT),
+        HumanMessagePromptTemplate.from_template(
+            "Context:\n{context}\n\nQuestion: {question}"
+        ),
+    ]
+)
 
 
+@lru_cache(maxsize=1)
 def get_llm() -> ChatAnthropic:
-    """Return the Claude chat model."""
+    """Return a cached ChatAnthropic (Claude) instance."""
     return ChatAnthropic(
-        model=ANTHROPIC_MODEL,
-        anthropic_api_key=ANTHROPIC_API_KEY,
-        temperature=0,
-        max_tokens=4096,
+        model=config.ANTHROPIC_MODEL,
+        anthropic_api_key=config.ANTHROPIC_API_KEY,
+        temperature=0.2,
+        max_tokens=2048,
     )
 
 
-def build_rag_chain():
-    """Construct and return the full conversational RAG chain.
-
-    The chain:
-    1. Contextualises the user question using chat history.
-    2. Retrieves relevant document chunks from ChromaDB.
-    3. Answers the question with Claude, citing the retrieved context.
-    """
-    llm = get_llm()
-    retriever = get_retriever()
-
-    history_aware_retriever = create_history_aware_retriever(
-        llm, retriever, CONTEXTUALISE_PROMPT
+def build_chain() -> ConversationalRetrievalChain:
+    """Build and return the conversational RAG chain."""
+    retriever = get_vectorstore().as_retriever(
+        search_type="similarity",
+        search_kwargs={"k": 5},
     )
 
-    qa_chain = create_stuff_documents_chain(llm, QA_PROMPT)
-
-    return create_retrieval_chain(history_aware_retriever, qa_chain)
+    return ConversationalRetrievalChain.from_llm(
+        llm=get_llm(),
+        retriever=retriever,
+        combine_docs_chain_kwargs={"prompt": QA_PROMPT},
+        return_source_documents=True,
+        verbose=False,
+    )

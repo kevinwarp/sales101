@@ -1,58 +1,67 @@
 #!/usr/bin/env python3
-"""Sales101 RAG application – CLI entry point."""
+"""Sales101 RAG CLI – ingest documents and chat with them."""
 
 from __future__ import annotations
 
 import argparse
+import logging
 import sys
 
 
-def _cmd_ingest(args: argparse.Namespace) -> None:
-    from ingestion.pipeline import ingest
+def _setup_logging(verbose: bool) -> None:
+    level = logging.DEBUG if verbose else logging.INFO
+    logging.basicConfig(
+        level=level,
+        format="%(asctime)s  %(levelname)-8s  %(name)s  %(message)s",
+        datefmt="%H:%M:%S",
+    )
 
-    folder = getattr(args, "folder_id", None)
-    count = ingest(folder_id=folder)
-    print(f"Ingestion complete – {count} chunk(s) stored.")
+
+def cmd_ingest(args: argparse.Namespace) -> None:
+    """Run the document ingestion pipeline."""
+    from ingest.pipeline import run
+
+    folder_ids = args.folder_ids or None
+    count = run(folder_ids=folder_ids)
+    print(f"\n✓ Ingested {count} chunks into the vector store.")
 
 
-def _cmd_chat(_args: argparse.Namespace) -> None:
-    from chat.interface import run_chat
+def cmd_chat(_args: argparse.Namespace) -> None:
+    """Start the interactive chat session."""
+    from chat.cli import start
 
-    run_chat()
+    start()
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(
         prog="sales101",
-        description="RAG application for querying sales documents.",
+        description="RAG-powered sales knowledge base",
     )
+    parser.add_argument("-v", "--verbose", action="store_true", help="Enable debug logging")
     sub = parser.add_subparsers(dest="command")
 
-    # -- ingest ----------------------------------------------------------------
-    ingest_parser = sub.add_parser(
-        "ingest", help="Download documents from Google Drive and store in ChromaDB."
-    )
+    # ── ingest ───────────────────────────────────────────────────────────
+    ingest_parser = sub.add_parser("ingest", help="Ingest documents from Google Drive")
     ingest_parser.add_argument(
-        "--folder-id",
-        dest="folder_id",
-        default=None,
-        help="Override the Google Drive folder ID from .env.",
+        "folder_ids",
+        nargs="*",
+        help="Google Drive folder IDs (overrides .env)",
     )
-    ingest_parser.set_defaults(func=_cmd_ingest)
 
-    # -- chat ------------------------------------------------------------------
-    chat_parser = sub.add_parser(
-        "chat", help="Start an interactive Q&A session over ingested documents."
-    )
-    chat_parser.set_defaults(func=_cmd_chat)
+    # ── chat ─────────────────────────────────────────────────────────────
+    sub.add_parser("chat", help="Start an interactive chat session")
 
-    # -- dispatch --------------------------------------------------------------
     args = parser.parse_args()
-    if not args.command:
+    _setup_logging(args.verbose)
+
+    if args.command == "ingest":
+        cmd_ingest(args)
+    elif args.command == "chat":
+        cmd_chat(args)
+    else:
         parser.print_help()
         sys.exit(1)
-
-    args.func(args)
 
 
 if __name__ == "__main__":
